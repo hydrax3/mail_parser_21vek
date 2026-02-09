@@ -29,6 +29,9 @@ ARCHIVE_GID = 0  # Main archive sheet
 STATS_GID = 96142908  # Statistics sheet
 INACTIVE_MONTHS = 3  # Months of inactivity before archiving
 
+# Timezone (UTC+3 for Moscow)
+MSK_TZ = datetime.timezone(datetime.timedelta(hours=3))
+
 # Operators sheet GID
 OPERATORS_GID = 2115150025
 
@@ -102,7 +105,10 @@ def get_operator_emails(client):
         return set()
 
 def normalize_date(date_obj):
-    return date_obj.astimezone().strftime('%Y-%m-%d %H:%M:%S')
+    # Ensure we use MSK timezone
+    if date_obj.tzinfo is None:
+        date_obj = date_obj.replace(tzinfo=MSK_TZ)
+    return date_obj.astimezone(MSK_TZ).strftime('%Y-%m-%d %H:%M:%S')
 
 def extract_email(sender_str):
     """
@@ -254,8 +260,8 @@ def sync_emails():
     def get_aware_date(x):
         d = x['msg'].date
         if d.tzinfo is None:
-            d = d.replace(tzinfo=datetime.datetime.now().astimezone().tzinfo)
-        return d
+            d = d.replace(tzinfo=MSK_TZ)
+        return d.astimezone(MSK_TZ)
         
     timeline.sort(key=get_aware_date)
     
@@ -477,7 +483,7 @@ def log_operator_activity(log_gid):
         
         # 4. Scan
         new_rows = []
-        date_start = datetime.datetime.now() - datetime.timedelta(hours=24)
+        date_start = datetime.datetime.now(MSK_TZ) - datetime.timedelta(hours=24)
         
         with MailBox('mail.21vek.tech', port=993).login(YANDEX_EMAIL, YANDEX_PASSWORD) as mailbox:
             folders_to_scan = ['INBOX']
@@ -565,7 +571,7 @@ def log_overdue_emails(target_gid):
 
         new_rows = []
         updates = []
-        now = datetime.datetime.now().astimezone()
+        now = datetime.datetime.now(MSK_TZ)
         
         # 5. Iterate Source
         for i, row in enumerate(source_values):
@@ -584,7 +590,9 @@ def log_overdue_emails(target_gid):
                 
             try:
                 dt = datetime.datetime.strptime(time_str, '%Y-%m-%d %H:%M:%S')
-                dt = dt.replace(tzinfo=now.tzinfo) 
+                # Assume stored dates are MSK if no tzinfo, but we compare with aware 'now'
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=MSK_TZ) 
             except ValueError:
                 print(f"DEBUG: Msg {msg_id} date parse error: '{time_str}'")
                 continue
@@ -666,7 +674,7 @@ def aggregate_to_stats(rows, stats_ws):
         if time_str:
             year_month = time_str[:7]  # "2026-02"
         else:
-            year_month = datetime.datetime.now().strftime("%Y-%m")
+            year_month = datetime.datetime.now(MSK_TZ).strftime("%Y-%m")
         month_counts[year_month] = month_counts.get(year_month, 0) + 1
     
     # Read existing stats
@@ -742,7 +750,7 @@ def archive_inactive_threads():
         # Schema: id, theme, sender, time, status, type, last_replyer, last_activity
         LAST_ACTIVITY_COL = 7
         
-        now = datetime.datetime.now()
+        now = datetime.datetime.now(MSK_TZ)
         cutoff = now - datetime.timedelta(days=INACTIVE_MONTHS * 30)
         
         rows_to_archive = []
