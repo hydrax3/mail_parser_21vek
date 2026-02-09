@@ -1,0 +1,45 @@
+name: Run Email Parser
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'  # Run every 30 minutes
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  run-parser:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Create .env file
+      run: |
+        echo "YANDEX_EMAIL=${{ secrets.YANDEX_EMAIL }}" >> .env
+        echo "YANDEX_PASSWORD=${{ secrets.YANDEX_PASSWORD }}" >> .env
+        echo "GOOGLE_SHEET_URL=${{ secrets.GOOGLE_SHEET_URL }}" >> .env
+
+    - name: Create credentials.json
+      run: |
+        echo '${{ secrets.GCP_CREDENTIALS_JSON }}' > credentials.json
+
+    - name: Run Parser
+      run: python parser.py
+
+    - name: Commit state (.last_sync)
+      run: |
+        git config --global user.name 'GitHub Action'
+        git config --global user.email 'action@github.com'
+        git add .last_sync
+        git commit -m "Update .last_sync timestamp" || exit 0
+        git push

@@ -1,0 +1,5 @@
+imap-tools
+gspread
+google-auth
+oauth2client
+python-dotenv
