@@ -2,7 +2,7 @@ name: Run Email Parser
 
 on:
   schedule:
-    - cron: '*/10 * * * *'  
+    - cron: '*/2 * * * *'  
   workflow_dispatch:  # Allow manual trigger
 
 jobs:
