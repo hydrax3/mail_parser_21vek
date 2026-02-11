@@ -2,7 +2,7 @@ name: Run Email Parser
 
 on:
   schedule:
-    - cron: '*/5 * * * *'  # Run every 5 minutes
+    - cron: '0 * * * *'  # Run every 60 minutes
   workflow_dispatch:  # Allow manual trigger
 
 permissions:
