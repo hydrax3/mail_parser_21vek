@@ -7,6 +7,7 @@ from imap_tools import MailBox, AND
 import gspread
 from google.oauth2.service_account import Credentials
 import email.utils
+import json
 
 # Load environment variables
 load_dotenv()
@@ -38,11 +39,27 @@ OPERATORS_GID = 2115150025
 # Sync state file
 LAST_SYNC_FILE = '.last_sync'
 
-def get_sheet():
-    if not os.path.exists(CREDENTIALS_FILE):
-        raise FileNotFoundError(f"Credentials file '{CREDENTIALS_FILE}' not found.")
+def get_credentials():
+    """
+    Returns Google Credentials object.
+    Tries to load from GCP_CREDENTIALS_JSON env var first,
+    then falls back to CREDENTIALS_FILE.
+    """
+    if os.getenv('GCP_CREDENTIALS_JSON'):
+        try:
+            info = json.loads(os.getenv('GCP_CREDENTIALS_JSON'))
+            return Credentials.from_service_account_info(info, scopes=SCOPES)
+        except json.JSONDecodeError as e:
+            print(f"Error parsing GCP_CREDENTIALS_JSON: {e}")
+            # Fallthrough to file
+            
+    if os.path.exists(CREDENTIALS_FILE):
+        return Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=SCOPES)
     
-    creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=SCOPES)
+    raise FileNotFoundError(f"Credentials not found (Env var GCP_CREDENTIALS_JSON or file '{CREDENTIALS_FILE}')")
+
+def get_sheet():
+    creds = get_credentials()
     client = gspread.authorize(creds)
     try:
         sheet = client.open_by_url(GOOGLE_SHEET_URL)
@@ -168,7 +185,7 @@ def sync_emails():
     
     try:
         # Get sheet and load operator emails
-        creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=SCOPES)
+        creds = get_credentials()
         client = gspread.authorize(creds)
         operator_emails = get_operator_emails(client)
         # Add bot email to operators list
@@ -409,7 +426,7 @@ def update_daily_stats(log_rows, stats_sheet_name="OperatorStats"):
             print("No stats data to update.")
             return
 
-        creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=SCOPES)
+        creds = get_credentials()
         client = gspread.authorize(creds)
         spreadsheet = client.open_by_url(GOOGLE_SHEET_URL)
         
@@ -464,7 +481,7 @@ def log_operator_activity(log_gid):
     print(f"Starting Operator Activity Log (Target GID: {log_gid})...")
     
     try:
-        creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=SCOPES)
+        creds = get_credentials()
         client = gspread.authorize(creds)
         
         # 1. Operators
@@ -536,7 +553,7 @@ def log_overdue_emails(target_gid):
     
     try:
         # Connect
-        creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=SCOPES)
+        creds = get_credentials()
         client = gspread.authorize(creds)
         
         # 1. Open Target Sheet (Log)
@@ -646,7 +663,7 @@ def log_overdue_emails(target_gid):
 
 def get_archive_sheet(gid):
     """Get worksheet from archive spreadsheet by GID."""
-    creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=SCOPES)
+    creds = get_credentials()
     client = gspread.authorize(creds)
     sheet = client.open_by_url(ARCHIVE_SHEET_URL)
     
@@ -722,7 +739,7 @@ def archive_inactive_threads():
     print(f">>> Archiving threads inactive for >{INACTIVE_MONTHS} months...")
     
     try:
-        creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=SCOPES)
+        creds = get_credentials()
         client = gspread.authorize(creds)
         
         # Open main sheet
